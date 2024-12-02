@@ -312,6 +312,16 @@ edan35::Assignment2::run()
 		return;
 	}
 
+	GLuint toon_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Toon shader",
+	                                         { { ShaderType::vertex, "EDAN35/toon_shader.vert" },
+	                                           { ShaderType::fragment, "EDAN35/toon_shader.frag" } },
+	                                         toon_shader);
+	if (toon_shader == 0u) {
+		LogError("Failed to load toon shader");
+		return;
+	}
+
 	auto const set_uniforms = [](GLuint /*program*/){};
 
 	ViewProjTransforms camera_view_proj_transforms;
