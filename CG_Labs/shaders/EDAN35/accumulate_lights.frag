@@ -35,12 +35,38 @@ uniform float light_angle_falloff;
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
 
-float toon(vec3 n, vec3 L) {
+float hatch(float color, float step) {
+	int test = int(ceil(color * step));
+	//hårdkodat, inte bra
+	float temp;
+	switch(test) {
+		case 0:
+			color = 0.0f;
+			break;
+		case 1:
+			if(mod(int(gl_FragCoord.x/2 + gl_FragCoord.y/2), 4) == 0) {
+				color = 0.0f;
+			}
+		case 2:
+			if(mod(int(gl_FragCoord.x/2 - gl_FragCoord.y/2), 4) == 0) {
+				color = 0.0f;
+			}
+		case 3:
+
+			break;
+	}
+	return color;
+}
+
+float toon(vec3 n, vec3 L, float factor) {
 	float cos_a = max(0.0, dot(n,L));
 	float toon_step = 3.0;
-	float toon_shade = floor(cos_a * toon_step) / toon_step;
+	float toon_shade = round(cos_a * toon_step * min(factor, 1.0)) / toon_step;
+	toon_shade = hatch(toon_shade, toon_step);
 	return toon_shade;
 }
+
+
 
 void main()
 {
@@ -77,7 +103,7 @@ void main()
 
 
 	//smoother shadows
-	int size = 5;
+	int size = 7;
 	//floor
 	int range = size / 2;
 	vec2 sample_coords;
@@ -119,11 +145,12 @@ void main()
 
 	float falloff = light_intensity * dist_sq * ang_falloff;
 
-	float toon_color = toon(normal, L);
+	float toon_color = toon(normal, L, falloff * shadow_ratio);
 
 	vec3 col = toon_color * light_color;
 
 
-	light_diffuse_contribution  = vec4(col, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio ;
+	light_diffuse_contribution  = vec4(col, 1.0); 
+	//vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio ;
 	light_specular_contribution = vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 }

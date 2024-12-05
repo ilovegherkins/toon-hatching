@@ -30,12 +30,14 @@ void main()
 	// Diffuse color
 	geometry_diffuse = vec4(0.0f);
 	if (has_diffuse_texture)
-		geometry_diffuse = texture(diffuse_texture, fs_in.texcoord);
+		//geometry_diffuse = texture(diffuse_texture, fs_in.texcoord);
+		geometry_diffuse = vec4(1.0f);
 
 	// Specular color
 	geometry_specular = vec4(0.0f);
 	if (has_specular_texture)
-		geometry_specular = texture(specular_texture, fs_in.texcoord);
+		//geometry_specular = texture(specular_texture, fs_in.texcoord);
+		geometry_specular = vec4(0.0, 0.0, 0.0, 1.0);
 
 	// Worldspace normal
 	//geometry_normal.xyz = vec3(0.0); 
