@@ -35,7 +35,13 @@ uniform float light_angle_falloff;
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
 
-//phong: diffuseuse, specular, ambient
+float toon(vec3 n, vec3 L) {
+	float cos_a = max(0.0, dot(n,L));
+	float toon_step = 3.0;
+	float toon_shade = floor(cos_a * toon_step) / toon_step;
+	return toon_shade;
+}
+
 void main()
 {
 	//texture space
@@ -113,7 +119,11 @@ void main()
 
 	float falloff = light_intensity * dist_sq * ang_falloff;
 
+	float toon_color = toon(normal, L);
 
-	light_diffuse_contribution  = vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio ;
+	vec3 col = toon_color * light_color;
+
+
+	light_diffuse_contribution  = vec4(col, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio ;
 	light_specular_contribution = vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 }
