@@ -32,6 +32,9 @@ namespace constant
 	constexpr size_t lights_nb           = 4;
 	constexpr float  light_intensity     = 72.0f * (scale_lengths * scale_lengths);
 	constexpr float  light_angle_falloff = glm::radians(37.0f);
+
+	constexpr float  hatch_spacing		 = 0.75f;
+	constexpr size_t hatch_sharpness	 = 2;
 }
 
 namespace
@@ -154,6 +157,8 @@ namespace
 		GLuint light_direction{ 0u };
 		GLuint light_intensity{ 0u };
 		GLuint light_angle_falloff{ 0u };
+		GLuint hatch_spacing{ 0u };
+		GLuint hatch_sharpness{ 0u };
 	};
 	void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations);
 
@@ -344,6 +349,8 @@ edan35::Assignment2::run()
 	std::array<glm::vec3, constant::lights_nb> lightColors;
 	int lights_nb = static_cast<int>(constant::lights_nb);
 	bool are_lights_paused = false;
+	float hatch_spacing = constant::hatch_spacing;
+	int hatch_sharpness = constant::hatch_sharpness;
 
 	for (size_t i = 0; i < static_cast<size_t>(lights_nb); ++i) {
 		lightTransforms[i].SetTranslate(glm::vec3(0.0f, 1.25f, 0.0f) * constant::scale_lengths);
@@ -620,6 +627,8 @@ edan35::Assignment2::run()
 				glUniform3fv(accumulate_light_shader_locations.light_direction, 1, glm::value_ptr(lightTransform.GetFront()));
 				glUniform1f(accumulate_light_shader_locations.light_intensity, constant::light_intensity);
 				glUniform1f(accumulate_light_shader_locations.light_angle_falloff, constant::light_angle_falloff);
+				glUniform1f(accumulate_light_shader_locations.hatch_spacing, hatch_spacing);
+				glUniform1i(accumulate_light_shader_locations.hatch_sharpness, hatch_sharpness);
 
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)]);
@@ -814,6 +823,8 @@ edan35::Assignment2::run()
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
+			ImGui::SliderFloat("Hatch spacing", &hatch_spacing, 0.0f, 2.0f);
+			ImGui::SliderInt("Hatch sharpness", &hatch_sharpness, 1, 100);
 		}
 		ImGui::End();
 
@@ -1114,6 +1125,8 @@ void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, Accumu
 	locations.light_direction = glGetUniformLocation(accumulate_lights_shader, "light_direction");
 	locations.light_intensity = glGetUniformLocation(accumulate_lights_shader, "light_intensity");
 	locations.light_angle_falloff = glGetUniformLocation(accumulate_lights_shader, "light_angle_falloff");
+	locations.hatch_spacing = glGetUniformLocation(accumulate_lights_shader, "hatch_spacing");
+	locations.hatch_sharpness = glGetUniformLocation(accumulate_lights_shader, "hatch_sharpness");
 
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));
