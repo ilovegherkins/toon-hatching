@@ -30,8 +30,8 @@ void main()
 	// Diffuse color
 	geometry_diffuse = vec4(0.0f);
 	if (has_diffuse_texture)
-		//geometry_diffuse = texture(diffuse_texture, fs_in.texcoord);
-		geometry_diffuse = vec4(1.0f);
+		geometry_diffuse = vec4(0.3, 0.3, 0.3, 1.0) + 0.7*texture(diffuse_texture, vec2(0.5,0.25));
+		//geometry_diffuse = vec4(1.0f);
 
 	// Specular color
 	geometry_specular = vec4(0.0f);

@@ -21,6 +21,7 @@ uniform int light_index;
 uniform sampler2D depth_texture;
 uniform sampler2D normal_texture;
 uniform sampler2D shadow_texture;
+uniform sampler2D diffuse_texture;
 
 uniform vec2 inverse_screen_resolution;
 
@@ -38,10 +39,9 @@ uniform int hatch_sharpness;
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
 
-float hatch(float color, float step) {
+float hatch(float color, int step) {
 	int test = int(ceil(color * step));
 	//hårdkodat, inte bra
-	float temp;
 	switch(test) {
 		case 0:
 			color = 0.0f;
@@ -57,15 +57,65 @@ float hatch(float color, float step) {
 	return color;
 }
 
-float toon(vec3 n, vec3 L, float factor) {
+float toon(vec3 n, vec3 L, float factor, int toon_step) {
 	float cos_a = max(0.0, dot(n,L));
-	float toon_step = 3.0;
 	float toon_shade = round(cos_a * toon_step * min(factor, 1.0)) / toon_step;
-	toon_shade = hatch(toon_shade, toon_step);
 	return toon_shade;
 }
 
+void sobel_texture(inout vec4 n[9], sampler2D tex, vec2 coord) {
+	float s_x = inverse_screen_resolution.x;
+	float s_y = inverse_screen_resolution.y;
+	n[0] = texture2D(tex, coord + vec2(-s_x, -s_y));
+	n[1] = texture2D(tex, coord + vec2( 0.0, -s_y));
+	n[2] = texture2D(tex, coord + vec2( s_x, -s_y));
+	n[3] = texture2D(tex, coord + vec2(-s_x,  0.0));
+	n[4] = texture2D(tex, coord);
+	n[5] = texture2D(tex, coord + vec2( s_x,  0.0));
+	n[6] = texture2D(tex, coord + vec2(-s_x,  s_y));
+	n[7] = texture2D(tex, coord + vec2( 0.0,  s_y));
+	n[8] = texture2D(tex, coord + vec2( s_x,  s_y));
+}
 
+float edge(vec2 t, sampler2D n_texture, sampler2D d_texture) {
+	mat3 sobel_x = mat3( 1, 2, 1,
+						 0, 0, 0,
+						-1,-2,-1);
+	mat3 sobel_y = transpose(sobel_x);
+
+	vec2 offset;
+	vec2 sample_pixel;
+	float test_x = 0;
+	float test_y = 0;
+	for(int i = -1; i <= 1; ++i) {
+		for (int j = -1; j <= 1; ++j) {
+			offset = vec2(i, j) * inverse_screen_resolution;
+			sample_pixel = t + offset;
+			test_x += length(texture(n_texture, sample_pixel).xyz) * sobel_x[i+1][j+1];
+			test_y += length(texture(n_texture, sample_pixel).xyz) * sobel_y[i+1][j+1];
+		}
+	}
+	float g = abs(test_x) + abs(test_y);
+
+	return max(1-5*g, 0);
+
+	//vec4[9] depth;
+	//vec4[9] normal;
+	//sobel_texture(depth, d_texture, t);
+	//sobel_texture(normal, n_texture, t);
+//
+	//vec4 sobel_edge_depth_h = 1.0*depth[2] + (2.0*depth[5]) + 1.0*depth[8] - (1.0*depth[0] + (2.0*depth[3]) + 1.0*depth[6]);
+  	//vec4 sobel_edge_depth_v = 1.0*depth[0] + (2.0*depth[1]) + 1.0*depth[2] - (1.0*depth[6] + (2.0*depth[7]) + 1.0*depth[8]);
+//
+	//vec4 sobel_edge_normal_h = 1.0*normal[2] + (2.0*normal[5]) + 1.0*normal[8] - (1.0*normal[0] + (2.0*normal[3]) + 1.0*normal[6]);
+  	//vec4 sobel_edge_normal_v = 1.0*normal[0] + (2.0*normal[1]) + 1.0*normal[2] - (1.0*normal[6] + (2.0*normal[7]) + 1.0*normal[8]);
+//
+	//vec4 sobel = sqrt((sobel_edge_depth_h * sobel_edge_depth_h) + (sobel_edge_depth_v * sobel_edge_depth_v))
+	//           ;//+ sqrt((sobel_edge_normal_h * sobel_edge_normal_h) + (sobel_edge_normal_v * sobel_edge_normal_v));
+//
+	//return 1.0-sobel.rgb;
+	
+}
 
 void main()
 {
@@ -115,7 +165,7 @@ void main()
 		for(int j = -range; j <= range; ++j) {
 			vec2 offset = vec2(i,j) * shadowmap_texel_size.xy;
 			sample_coords = shadow_coords + offset;
-			sample_depth = texture(shadow_texture,sample_coords).x;
+			sample_depth = texture(shadow_texture, sample_coords).x;
 
 			//depth comparison, if shadow
 			if(sample_depth + epsilon < pixel_depth) {
@@ -144,12 +194,15 @@ void main()
 
 	float falloff = light_intensity * dist_sq * ang_falloff;
 
-	float toon_color = toon(normal, L, falloff * shadow_ratio);
+	const int toon_step = 3;
 
-	vec3 col = toon_color * light_color;
+	float toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
+	float hatch_color = hatch(toon_color, toon_step);
 
-
-	light_diffuse_contribution  = vec4(col, 1.0); 
-	//vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio ;
+	float e = edge(texcoords, normal_texture, depth_texture);
+	
+	vec3 col = e * hatch_color * vec3(1.0);
+	
+	light_diffuse_contribution  = vec4(col, 1.0);//vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 	light_specular_contribution = vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 }
