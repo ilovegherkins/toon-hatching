@@ -47,15 +47,9 @@ float hatch(float color, float step) {
 			color = 0.0f;
 			break;
 		case 1:
-			//if(mod(int(gl_FragCoord.x/2 + gl_FragCoord.y/2), 4) == 0) {
-			//if(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y) > 0.8f) {
-				color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y), hatch_sharpness));
-			//}
+			color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y), hatch_sharpness));
 		case 2:
-			//if(mod(int(gl_FragCoord.x/2 - gl_FragCoord.y/2), 4) == 0) {
-			//if(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y) > 0.8f) {
-				color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y), hatch_sharpness));
-			//}
+			color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y), hatch_sharpness));
 		case 3:
 
 			break;
