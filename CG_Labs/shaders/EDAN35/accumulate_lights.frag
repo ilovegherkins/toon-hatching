@@ -227,13 +227,12 @@ void main()
 	}
 	if (has_edges) {
 		e = edge(texcoords, normal_texture, 1);
-		e *= edge(texcoords, depth_texture, 5000);
+		e *= edge(texcoords, depth_texture, 1000);
 	}
 	
 	//an attempt was made... :)
 	//vec3 hatch_color2 = hatch2(texcoords, world_position, toon_step, toon_color);
 	//hatch_color2 = vec3(toon_color) - hatch_color2;
-	
 	//vec3 in_from_vert = handle_curvature(texcoords, world_position);
 	//in_from_vert = in_from_vert* toon_color;
 
