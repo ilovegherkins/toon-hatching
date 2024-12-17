@@ -35,6 +35,10 @@ namespace constant
 
 	constexpr float  hatch_spacing		 = 0.75f;
 	constexpr size_t hatch_sharpness	 = 2;
+
+	constexpr bool   has_hatching		 = true;
+	constexpr bool   has_toon			 = true;
+	constexpr bool	 has_edges			 = true;
 }
 
 namespace
@@ -162,6 +166,9 @@ namespace
 		GLuint hatch_spacing{ 0u };
 		GLuint hatch_sharpness{ 0u };
 		GLuint direction_texture{ 0u };
+		GLuint has_hatching{ 0u };
+		GLuint has_toon{ 0u };
+		GLuint has_edges{ 0u };
 	};
 	void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations);
 
@@ -344,6 +351,9 @@ edan35::Assignment2::run()
 	bool are_lights_paused = false;
 	float hatch_spacing = constant::hatch_spacing;
 	int hatch_sharpness = constant::hatch_sharpness;
+	bool has_hatching = constant::has_hatching;
+	bool has_toon = constant::has_toon;
+	bool has_edges = constant::has_edges;
 
 	for (size_t i = 0; i < static_cast<size_t>(lights_nb); ++i) {
 		lightTransforms[i].SetTranslate(glm::vec3(0.0f, 1.25f, 0.0f) * constant::scale_lengths);
@@ -625,6 +635,9 @@ edan35::Assignment2::run()
 				glUniform1f(accumulate_light_shader_locations.light_angle_falloff, constant::light_angle_falloff);
 				glUniform1f(accumulate_light_shader_locations.hatch_spacing, hatch_spacing);
 				glUniform1i(accumulate_light_shader_locations.hatch_sharpness, hatch_sharpness);
+				glUniform1i(accumulate_light_shader_locations.has_hatching, has_hatching);
+				glUniform1i(accumulate_light_shader_locations.has_toon, has_toon);
+				glUniform1i(accumulate_light_shader_locations.has_edges, has_edges);
 
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)]);
@@ -739,7 +752,7 @@ edan35::Assignment2::run()
 
 		//
 		// Output content of the g-buffer as well as of the shadowmap, for debugging purposes
-		//
+		// 
 		if (show_textures) {
 			bonobo::displayTexture({-0.95f, -0.95f}, {-0.55f, -0.55f}, textures[toU(Texture::GBufferDiffuse)],            samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
 			bonobo::displayTexture({-0.45f, -0.95f}, {-0.05f, -0.55f}, textures[toU(Texture::GBufferDirection)],/*specular*/          samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
@@ -824,8 +837,11 @@ edan35::Assignment2::run()
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
-			ImGui::SliderFloat("Hatch spacing", &hatch_spacing, 0.0f, 0.1f);
+			ImGui::Checkbox("Hatching", &has_hatching);
+			ImGui::SliderFloat("Hatch spacing", &hatch_spacing, 0.0f, 1.0f);
 			ImGui::SliderInt("Hatch sharpness", &hatch_sharpness, 1, 100);
+			ImGui::Checkbox("Toon shading", &has_toon);
+			ImGui::Checkbox("Outlines", &has_edges);
 		}
 		ImGui::End();
 
@@ -1136,6 +1152,9 @@ void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, Accumu
 	locations.hatch_spacing = glGetUniformLocation(accumulate_lights_shader, "hatch_spacing");
 	locations.hatch_sharpness = glGetUniformLocation(accumulate_lights_shader, "hatch_sharpness");
 	locations.direction_texture = glGetUniformLocation(accumulate_lights_shader, "direction_texture");
+	locations.has_hatching = glGetUniformLocation(accumulate_lights_shader, "has_hatching");
+	locations.has_toon = glGetUniformLocation(accumulate_lights_shader, "has_toon");
+	locations.has_edges = glGetUniformLocation(accumulate_lights_shader, "has_edges");
 
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));

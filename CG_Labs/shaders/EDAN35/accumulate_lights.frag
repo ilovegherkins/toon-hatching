@@ -36,26 +36,29 @@ uniform float light_angle_falloff;
 
 uniform float hatch_spacing;
 uniform int hatch_sharpness;
+uniform bool has_hatching;
+uniform bool has_toon;
+uniform bool has_edges;
 
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
 
 float hatch(float color, int step) {
 	int test = int(ceil(color * step));
-	//hårdkodat, inte bra
+	float res = has_toon ? color : 1.0;
 	switch(test) {
 		case 0:
-			color = 0.0f;
+			res = 0.0f;
 			break;
 		case 1:
-			color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y), hatch_sharpness));
+			res *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y), hatch_sharpness));
 		case 2:
-			color *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y), hatch_sharpness));
+			res *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y), hatch_sharpness));
 		case 3:
 
 			break;
 	}
-	return color;
+	return res;
 }
 
 vec3 hatch2(vec2 coords, vec3 world_pos, int toon_step, float toon_color) {
@@ -66,10 +69,6 @@ vec3 hatch2(vec2 coords, vec3 world_pos, int toon_step, float toon_color) {
 	float proj = dot(world_pos * scale_factor, surface_dir_sample);
 	
 	float hatch_pattern = abs(sin(proj * scale_factor * hatch_spacing * 3.14159)); 
-
-	//test, doesnt look nice at all:)
-	//float light_factor = clamp(1.0 - (spec), 0.0, 1.0);
-	//hatch_pattern *= light_factor * hatch_mask;
 
 	int hatch_level = int(ceil((1- toon_color) * toon_step));
     float hatch_mask = 0.0;
@@ -92,21 +91,7 @@ float toon(vec3 n, vec3 L, float factor, int toon_step) {
 	return toon_shade;
 }
 
-void sobel_texture(inout vec4 n[9], sampler2D tex, vec2 coord) {
-	float s_x = inverse_screen_resolution.x;
-	float s_y = inverse_screen_resolution.y;
-	n[0] = texture2D(tex, coord + vec2(-s_x, -s_y));
-	n[1] = texture2D(tex, coord + vec2( 0.0, -s_y));
-	n[2] = texture2D(tex, coord + vec2( s_x, -s_y));
-	n[3] = texture2D(tex, coord + vec2(-s_x,  0.0));
-	n[4] = texture2D(tex, coord);
-	n[5] = texture2D(tex, coord + vec2( s_x,  0.0));
-	n[6] = texture2D(tex, coord + vec2(-s_x,  s_y));
-	n[7] = texture2D(tex, coord + vec2( 0.0,  s_y));
-	n[8] = texture2D(tex, coord + vec2( s_x,  s_y));
-}
-
-float edge(vec2 t, sampler2D n_texture, sampler2D d_texture) {
+float edge(vec2 t, sampler2D tex, int weight) {
 	mat3 sobel_x = mat3( 1, 2, 1,
 						 0, 0, 0,
 						-1,-2,-1);
@@ -120,10 +105,8 @@ float edge(vec2 t, sampler2D n_texture, sampler2D d_texture) {
 		for (int j = -1; j <= 1; ++j) {
 			offset = vec2(i, j) * inverse_screen_resolution;
 			sample_pixel = t + offset;
-			test_x += length(texture(n_texture, sample_pixel).xyz) * sobel_x[i+1][j+1];
-			test_x += length(texture(d_texture, sample_pixel).xyz) * sobel_x[i+1][j+1];
-			test_y += length(texture(n_texture, sample_pixel).xyz) * sobel_y[i+1][j+1];
-			test_y += length(texture(d_texture, sample_pixel).xyz) * sobel_y[i+1][j+1];
+			test_x += length(texture(tex, sample_pixel).xyz) * sobel_x[i+1][j+1] * weight;
+			test_y += length(texture(tex, sample_pixel).xyz) * sobel_y[i+1][j+1] * weight;
 		}
 	}
 	float g = abs(test_x) + abs(test_y);
@@ -135,22 +118,23 @@ float edge(vec2 t, sampler2D n_texture, sampler2D d_texture) {
 
 vec3 handle_curvature(vec2 coords, vec3 world_pos) {
 	vec4 curv = texture(direction_texture, coords) * 2.0 - 1.0;
-	float curv_w = curv.w;
+	float curv_w = curv.w; // kappa_max
 	
 	float proj = dot(world_pos, curv.xyz);
 	float hatch = abs(1-pow(sin(proj * hatch_spacing), hatch_sharpness));
 	hatch = hatch/(1.0 + abs(curv_w));
 
-	float test_spacing = hatch_spacing * (1 + curv_w);
-	float hatch_2 = abs(1-pow(sin(proj * test_spacing), hatch_sharpness));
+	float dyn_spacing = hatch_spacing * (1 + abs(curv_w));
+	float hatch_2 = abs(1-pow(sin(proj * dyn_spacing), hatch_sharpness));
 
 	int scale = 300;
 	//float hatch = abs(1-pow(sin(scale*hatch_spacing*curv.x + scale*hatch_spacing*curv.y + scale*hatch_spacing*curv.z), hatch_sharpness));
 
-	float hatch_color = mix(hatch, hatch_2, 0.5);
-	return hatch_color * vec3(1.0);
+	//float hatch_color = mix(hatch, hatch_2, 0.5);
+	return hatch_2 * vec3(1.0);
 
 }
+
 
 void main()
 {
@@ -219,7 +203,6 @@ void main()
 	float diffuse = max(dot(normal , L), 0);
 	float spec = pow(max(dot(reflect(-L, normal), V), 0), 1);
 
-
 	//distance falloff
 	float dist_sq = 1/dot(dist_vec, dist_vec);
 
@@ -230,19 +213,31 @@ void main()
 	float falloff = light_intensity * dist_sq * ang_falloff;
 
 	const int toon_step = 3;
+	float toon_color = 1.0;
+	float hatch_color = 1.0;
+	float e = 1.0;
 
-	float toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
-	float hatch_color = hatch(toon_color, toon_step);
-	vec3 hatch_color2 = hatch2(texcoords, world_position, toon_step, toon_color);
-	hatch_color2 = vec3(toon_color) - hatch_color2;
-	float e = edge(texcoords, normal_texture, depth_texture);
-	vec3 final_res = vec3(e);
+	if (has_hatching) {
+		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
+		hatch_color = hatch(toon_color, toon_step);
+		toon_color = 1.0;
+	}
+	if (has_toon) {
+		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
+	}
+	if (has_edges) {
+		e = edge(texcoords, normal_texture, 1);
+		e *= edge(texcoords, depth_texture, 5000);
+	}
+	
+	//an attempt was made... :)
+	//vec3 hatch_color2 = hatch2(texcoords, world_position, toon_step, toon_color);
+	//hatch_color2 = vec3(toon_color) - hatch_color2;
+	
+	//vec3 in_from_vert = handle_curvature(texcoords, world_position);
+	//in_from_vert = in_from_vert* toon_color;
 
-	vec3 in_from_vert = handle_curvature(texcoords, world_position);
-	in_from_vert = in_from_vert* toon_color;
-
-	vec3 debug = 1 - abs(world_position);
-
-	light_diffuse_contribution  = vec4(in_from_vert, 1.0);//vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
-	light_specular_contribution = vec4(0.0);//vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
+	vec3 final_res = vec3(1.0) * toon_color * hatch_color * e;
+	light_diffuse_contribution  = vec4(final_res, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
+	light_specular_contribution = vec4(0.0); //vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 }

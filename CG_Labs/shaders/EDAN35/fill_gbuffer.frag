@@ -45,25 +45,16 @@ void main()
 	// Specular color
 	geometry_specular = vec4(0.0f);
 	if (has_specular_texture)
-		geometry_specular = texture(specular_texture, fs_in.texcoord);
-		//geometry_specular = vec4(0.0, 0.0, 0.0, 1.0);
+		//geometry_specular = texture(specular_texture, fs_in.texcoord);
+		geometry_specular = vec4(0.0, 0.0, 0.0, 1.0);
 
 
 	//texture normals range [0,1]
 	geometry_normal = vec4(fs_in.normal*0.5+0.5, 1.0);
 
 	// curvature
-	vec3 curvature_direction = abs(fs_in.kappa_max) > abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
-	curvature_direction = normalize(curvature_direction * 0.5 + 0.5);
-
-	//float projection = dot(fs_in.world_pos.xyz, curvature_direction);
-	//float hatch = abs(sin(projection * (hatch_spacing - 0.25f)));
-	//vec3 hatching_test = mix(vec3(1.0), vec3(0.0), hatch) ;
-
-	//float mean_curv = 0.5 * (fs_in.kappa_max + fs_in.kappa_min);
-	//hatch_mask = vec4(mean_curv);
-
-	vec3 debug = 1- abs(fs_in.world_pos.xyz);
+	//vec3 curvature_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
+	//curvature_direction = normalize(curvature_direction * 0.5 + 0.5);
 	
-	geometry_direction = vec4(curvature_direction, fs_in.kappa_max);
+	//geometry_direction = vec4(curvature_direction, fs_in.kappa_max);
 }
