@@ -49,6 +49,7 @@ namespace
 		ShadowMap,
 		GBufferDiffuse,
 		GBufferSpecular,
+		GBufferDirection,
 		GBufferWorldSpaceNormal,
 		LightDiffuseContribution,
 		LightSpecularContribution,
@@ -126,6 +127,7 @@ namespace
 		GLuint has_specular_texture{ 0u };
 		GLuint has_normals_texture{ 0u };
 		GLuint has_opacity_texture{ 0u };
+		GLuint direction_texture{ 0u };
 	};
 	void fillGBufferShaderLocations(GLuint gbuffer_shader, GBufferShaderLocations& locations);
 
@@ -159,6 +161,7 @@ namespace
 		GLuint light_angle_falloff{ 0u };
 		GLuint hatch_spacing{ 0u };
 		GLuint hatch_sharpness{ 0u };
+		GLuint direction_texture{ 0u };
 	};
 	void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations);
 
@@ -316,16 +319,6 @@ edan35::Assignment2::run()
 		LogError("Failed to load light cones rendering shader");
 		return;
 	}
-
-	//GLuint toon_shader = 0u;
-	//program_manager.CreateAndRegisterProgram("Toon shader",
-	//                                         { { ShaderType::vertex, "EDAN35/toon_shader.vert" },
-	//                                           { ShaderType::fragment, "EDAN35/toon_shader.frag" } },
-	//                                         toon_shader);
-	//if (toon_shader == 0u) {
-	//	LogError("Failed to load toon shader");
-	//	return;
-	//}
 
 	auto const set_uniforms = [](GLuint /*program*/){};
 
@@ -487,6 +480,7 @@ edan35::Assignment2::run()
 			glUniform1i(fill_gbuffer_shader_locations.specular_texture, 1);
 			glUniform1i(fill_gbuffer_shader_locations.normals_texture, 2);
 			glUniform1i(fill_gbuffer_shader_locations.opacity_texture, 3);
+			glUniform1i(fill_gbuffer_shader_locations.direction_texture, 4);
 			for (std::size_t i = 0; i < sponza_geometry.size(); ++i)
 			{
 				auto const& geometry = sponza_geometry[i];
@@ -546,6 +540,7 @@ edan35::Assignment2::run()
 			//
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[toU(FBO::LightAccumulation)]);
 			glViewport(0, 0, framebuffer_width, framebuffer_height);
+			
 			glClear(GL_COLOR_BUFFER_BIT);
 			// XXX: Is any clearing needed?
 			for (size_t i = 0; i < static_cast<size_t>(lights_nb); ++i) {
@@ -563,6 +558,7 @@ edan35::Assignment2::run()
 				glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[toU(FBO::ShadowMap)]);
 				glViewport(0, 0, constant::shadowmap_res_x, constant::shadowmap_res_y);
 				glClear(GL_DEPTH_BUFFER_BIT);
+				glClear(GL_COLOR_BUFFER_BIT);
 				// XXX: Is any clearing needed?
 
 				glUseProgram(fill_shadowmap_shader);
@@ -645,6 +641,11 @@ edan35::Assignment2::run()
 				glUniform1i(accumulate_light_shader_locations.shadow_texture, 2);
 				glBindSampler(2, samplers[toU(Sampler::Linear)]);
 
+				glActiveTexture(GL_TEXTURE3);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)]);
+				glUniform1i(accumulate_light_shader_locations.direction_texture, 3);
+				glBindSampler(3, samplers[toU(Sampler::Linear)]);
+
 				glBindVertexArray(cone_geometry.vao);
 				glDrawArrays(cone_geometry.drawing_mode, 0, cone_geometry.vertices_nb);
 
@@ -679,7 +680,7 @@ edan35::Assignment2::run()
 			bind_texture_with_sampler(GL_TEXTURE_2D, 1, resolve_deferred_shader, "specular_texture", textures[toU(Texture::GBufferSpecular)], samplers[toU(Sampler::Nearest)]);
 			bind_texture_with_sampler(GL_TEXTURE_2D, 2, resolve_deferred_shader, "light_d_texture", textures[toU(Texture::LightDiffuseContribution)], samplers[toU(Sampler::Nearest)]);
 			bind_texture_with_sampler(GL_TEXTURE_2D, 3, resolve_deferred_shader, "light_s_texture", textures[toU(Texture::LightSpecularContribution)], samplers[toU(Sampler::Nearest)]);
-
+			
 			bonobo::drawFullscreen();
 
 			glBindSampler(3, 0u);
@@ -741,7 +742,7 @@ edan35::Assignment2::run()
 		//
 		if (show_textures) {
 			bonobo::displayTexture({-0.95f, -0.95f}, {-0.55f, -0.55f}, textures[toU(Texture::GBufferDiffuse)],            samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
-			bonobo::displayTexture({-0.45f, -0.95f}, {-0.05f, -0.55f}, textures[toU(Texture::GBufferSpecular)],           samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
+			bonobo::displayTexture({-0.45f, -0.95f}, {-0.05f, -0.55f}, textures[toU(Texture::GBufferDirection)],/*specular*/          samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
 			bonobo::displayTexture({ 0.05f, -0.95f}, { 0.45f, -0.55f}, textures[toU(Texture::GBufferWorldSpaceNormal)],   samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
 			bonobo::displayTexture({ 0.55f, -0.95f}, { 0.95f, -0.55f}, textures[toU(Texture::DepthBuffer)],               samplers[toU(Sampler::Linear)], {0, 0, 0, -1}, glm::uvec2(framebuffer_width, framebuffer_height), true, mCamera.mNear, mCamera.mFar);
 			bonobo::displayTexture({-0.95f,  0.55f}, {-0.55f,  0.95f}, textures[toU(Texture::ShadowMap)],                 samplers[toU(Sampler::Linear)], {0, 0, 0, -1}, glm::uvec2(framebuffer_width, framebuffer_height), true, lightProjectionNearPlane, lightProjectionFarPlane);
@@ -823,7 +824,7 @@ edan35::Assignment2::run()
 			ImGui::Checkbox("Show basis", &show_basis);
 			ImGui::SliderFloat("Basis thickness scale", &basis_thickness_scale, 0.0f, 100.0f);
 			ImGui::SliderFloat("Basis length scale", &basis_length_scale, 0.0f, 100.0f);
-			ImGui::SliderFloat("Hatch spacing", &hatch_spacing, 0.0f, 2.0f);
+			ImGui::SliderFloat("Hatch spacing", &hatch_spacing, 0.0f, 0.1f);
 			ImGui::SliderInt("Hatch sharpness", &hatch_sharpness, 1, 100);
 		}
 		ImGui::End();
@@ -913,6 +914,10 @@ Textures createTextures(GLsizei framebuffer_width, GLsizei framebuffer_height)
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferWorldSpaceNormal)], "GBuffer normals");
 
+	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferDirection)], "GBuffer direction");
+
 	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::LightDiffuseContribution)]);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::LightDiffuseContribution)], "Light diffuse contribution");
@@ -970,12 +975,14 @@ FBOs createFramebufferObjects(Textures const& textures)
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, textures[toU(Texture::GBufferSpecular)], 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, textures[toU(Texture::GBufferWorldSpaceNormal)], 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)], 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)], 0);
 	glReadBuffer(GL_NONE); // Disable reading back from the colour attachments, as unnecessary in this assignment.
 	// Configure the mapping from fragment shader outputs to colour attachments.
-	std::array<GLenum, 3> const gbuffer_draws = {
+	std::array<GLenum, 4> const gbuffer_draws = {
 		GL_COLOR_ATTACHMENT0, // The fragment shader output at location 0 will be written to colour attachment 0 (i.e. the diffuse texture).
 		GL_COLOR_ATTACHMENT1, // The fragment shader output at location 1 will be written to colour attachment 1 (i.e. the specular texture).
-		GL_COLOR_ATTACHMENT2  // The fragment shader output at location 2 will be written to colour attachment 2 (i.e. the normal texture).
+		GL_COLOR_ATTACHMENT2,  // The fragment shader output at location 2 will be written to colour attachment 2 (i.e. the normal texture).
+		GL_COLOR_ATTACHMENT3	//dir
 	};
 	glDrawBuffers(static_cast<GLsizei>(gbuffer_draws.size()), gbuffer_draws.data());
 	validate_fbo("GBuffer");
@@ -1091,6 +1098,7 @@ void fillGBufferShaderLocations(GLuint gbuffer_shader, GBufferShaderLocations& l
 	locations.has_specular_texture = glGetUniformLocation(gbuffer_shader, "has_specular_texture");
 	locations.has_normals_texture = glGetUniformLocation(gbuffer_shader, "has_normals_texture");
 	locations.has_opacity_texture = glGetUniformLocation(gbuffer_shader, "has_opacity_texture");
+	locations.direction_texture = glGetUniformLocation(gbuffer_shader, "direction_texture");
 
 	glUniformBlockBinding(gbuffer_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 
@@ -1127,6 +1135,7 @@ void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, Accumu
 	locations.light_angle_falloff = glGetUniformLocation(accumulate_lights_shader, "light_angle_falloff");
 	locations.hatch_spacing = glGetUniformLocation(accumulate_lights_shader, "hatch_spacing");
 	locations.hatch_sharpness = glGetUniformLocation(accumulate_lights_shader, "hatch_sharpness");
+	locations.direction_texture = glGetUniformLocation(accumulate_lights_shader, "direction_texture");
 
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));
