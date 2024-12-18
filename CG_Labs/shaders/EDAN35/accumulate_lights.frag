@@ -48,15 +48,14 @@ float hatch(float color, int step) {
 	float res = has_toon ? color : 1.0;
 	switch(test) {
 		case 0:
-			res = 0.0f;
-			break;
+		    res = 0.0f;
+		    break;
 		case 1:
-			res *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y), hatch_sharpness));
+		    res *= 1-pow(abs(sin(hatch_spacing*gl_FragCoord.x + hatch_spacing*gl_FragCoord.y)), hatch_sharpness);
 		case 2:
-			res *= abs(1-pow(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y), hatch_sharpness));
+		    res *= 1-pow(abs(sin(hatch_spacing*gl_FragCoord.x - hatch_spacing*gl_FragCoord.y)), hatch_sharpness);
 		case 3:
-
-			break;
+		    break;
 	}
 	return res;
 }
@@ -116,22 +115,77 @@ float edge(vec2 t, sampler2D tex, int weight) {
 	
 }
 
-vec3 handle_curvature(vec2 coords, vec3 world_pos) {
-	vec4 curv = texture(direction_texture, coords) * 2.0 - 1.0;
-	float curv_w = curv.w; // kappa_max
+vec3 smooth_dir(vec2 coords) {
+	vec2 tex_size = 1.0/ textureSize(direction_texture,0);
+	vec3 smooth_dir = vec3(0.0);
+	for (int i = -1; i <= 1; ++i) {
+		for (int j = -1; j <= 1; ++j) {
+			smooth_dir += texture(direction_texture, coords + vec2(i,j) *tex_size).xyz;
+		}
+	}
+	smooth_dir = normalize(smooth_dir);
+	return smooth_dir;
+}
+
+vec3 rotate_dir(vec3 dir, float ang) {
+	float angle = radians(ang);
+	float c = cos(angle);
+	float s = sin(angle);
+	return vec3(
+		c * dir.x - s * dir.y,
+		s * dir.x + c * dir.y,
+		dir.z
+	);
+}
+
+float handle_curvature(vec2 coords, vec3 world_pos, int method, float color, int step) {
+	vec3 dir = vec3(0.0);
+	vec4 curv = texture(direction_texture, coords) * 2.0 - 1.0; 
+
+	switch (method) {
+		case 0:
+			// flowerpots look ok here and curtains look below decent
+			dir = smooth_dir(coords); 
+			break;
+		case 1:
+			// flowerpots look very good here, but curtains are an extreme mess
+			dir = curv.xyz;
+			break;
+		default:
+			//defaulting to the one that looks less bad
+			dir = smooth_dir(coords); 
+			break;
+	}
+	float k_max = curv.w; // max curv 
+
+	//flat surfaces leads to wide spacing of hatching lines
+	float curvature = 1.0 + abs(k_max);
+	float dyn_spacing = hatch_spacing / curvature;
+	//dir = length(dir) > 0.1 ? dir : vec3(0.0, 1.0, 0.0); 
+
+
+	float proj1 = dot(world_pos, dir);
+	float proj2 = dot(world_pos, rotate_dir(dir, 45.0));
+
+	float hatch1 = 1.0;
+	float hatch2 = 1.0;
 	
-	float proj = dot(world_pos, curv.xyz);
-	float hatch = abs(1-pow(sin(proj * hatch_spacing), hatch_sharpness));
-	hatch = hatch/(1.0 + abs(curv_w));
+	int shadow_level = int(ceil(color * step));
+	switch(shadow_level) {
+		case 0:
+		    
+		    break;
+		case 1:
+			hatch2 = abs(1.0 - pow(sin(proj2 * dyn_spacing), hatch_sharpness));
+		case 2:
+		    hatch1 = abs(1.0 - pow(sin(proj1 * dyn_spacing), hatch_sharpness));
+			break;
+		case 3:
+		    break;
+	}
 
-	float dyn_spacing = hatch_spacing * (1 + abs(curv_w));
-	float hatch_2 = abs(1-pow(sin(proj * dyn_spacing), hatch_sharpness));
-
-	int scale = 300;
-	//float hatch = abs(1-pow(sin(scale*hatch_spacing*curv.x + scale*hatch_spacing*curv.y + scale*hatch_spacing*curv.z), hatch_sharpness));
-
-	//float hatch_color = mix(hatch, hatch_2, 0.5);
-	return hatch_2 * vec3(1.0);
+	float hatch_color = mix(hatch1, hatch2, 0.5);
+	return hatch_color;
 
 }
 
@@ -212,14 +266,22 @@ void main()
 
 	float falloff = light_intensity * dist_sq * ang_falloff;
 
+
 	const int toon_step = 3;
 	float toon_color = 1.0;
 	float hatch_color = 1.0;
 	float e = 1.0;
 
+	int curve_hatch_method = 0; // 0 or 1. 0 looks less bad in general
 	if (has_hatching) {
 		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
+
+		//non-curve hatching
 		hatch_color = hatch(toon_color, toon_step);
+
+		//curve hatching
+		//hatch_color = handle_curvature(texcoords, world_position, curve_hatch_method, toon_color, toon_step);
+
 		toon_color = 1.0;
 	}
 	if (has_toon) {
@@ -230,12 +292,7 @@ void main()
 		e *= edge(texcoords, depth_texture, 1000);
 	}
 	
-	//an attempt was made... :)
-	//vec3 hatch_color2 = hatch2(texcoords, world_position, toon_step, toon_color);
-	//hatch_color2 = vec3(toon_color) - hatch_color2;
-	//vec3 in_from_vert = handle_curvature(texcoords, world_position);
-	//in_from_vert = in_from_vert* toon_color;
-
+	
 	vec3 final_res = vec3(1.0) * toon_color * hatch_color * e;
 	light_diffuse_contribution  = vec4(final_res, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 	light_specular_contribution = vec4(0.0); //vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;

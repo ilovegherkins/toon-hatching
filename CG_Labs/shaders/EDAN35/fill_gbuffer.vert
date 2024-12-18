@@ -41,8 +41,6 @@ void main() {
 	vs_out.tangent  = normalize(tangent);
 	vs_out.binormal = normalize(binormal);
 
-
-	/*
 	vec3 normal = normalize(normal);	
 	vec3 tangent = normalize(tangent);
 	vec3 binormal = normalize(binormal);
@@ -68,7 +66,7 @@ void main() {
 	vs_out.kappa_min = k_min;
 	vs_out.d_max = d_max; //max principal direction (eigenvalue of tensor)
 	vs_out.d_min = d_min;
-	*/
+	
 
 	gl_Position = camera.view_projection * vertex_model_to_world * vec4(vertex, 1.0);
 }

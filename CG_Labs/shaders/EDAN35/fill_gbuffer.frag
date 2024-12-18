@@ -53,8 +53,7 @@ void main()
 	geometry_normal = vec4(fs_in.normal*0.5+0.5, 1.0);
 
 	// curvature 
-	//vec3 curvature_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
-	//curvature_direction = normalize(curvature_direction * 0.5 + 0.5);
-	
-	//geometry_direction = vec4(curvature_direction, fs_in.kappa_max);
+	vec3 curvature_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
+	curvature_direction = normalize(curvature_direction * 0.5 + 0.5);
+	geometry_direction = vec4(curvature_direction, fs_in.kappa_max);
 }
