@@ -41,30 +41,34 @@ void main() {
 	vs_out.tangent  = normalize(tangent);
 	vs_out.binormal = normalize(binormal);
 
-	vec3 normal = normalize(normal);	
-	vec3 tangent = normalize(tangent);
-	vec3 binormal = normalize(binormal);
+	vec3 normal = normalize(mat3(vertex_model_to_world) *normal);	
+	vec3 tangent = normalize(mat3(vertex_model_to_world) *tangent);
+	vec3 binormal = normalize(mat3(vertex_model_to_world) * binormal);
 
-	mat3 curvature_tensor = mat3(dot(tangent, tangent),	dot(tangent, binormal),		dot(tangent, normal),
-								dot(binormal, tangent),	dot(binormal, binormal),	dot(binormal, normal),
-								dot(normal, tangent),	dot(normal, binormal),		dot(normal, normal)
-							);
+	//ambitions were high...
+	mat3 curvature_tensor = mat3(1,0,0,0,1,0,0,0,1);
+							//mat3(dot(tangent, tangent),	dot(tangent, binormal),		dot(tangent, normal),
+							//	dot(binormal, tangent),	dot(binormal, binormal),	dot(binormal, normal),
+							//	dot(normal, tangent),	dot(normal, binormal),		dot(normal, normal)
+							//);
 	
-	float trace = curvature_tensor[0][0] + curvature_tensor[1][1] + curvature_tensor[2][2];
-	float det = curvature_tensor[0][0] * (curvature_tensor[1][1] * curvature_tensor[2][2] - curvature_tensor[1][2] * curvature_tensor[2][1]) -
-    			curvature_tensor[0][1] * (curvature_tensor[1][0] * curvature_tensor[2][2] - curvature_tensor[1][2] * curvature_tensor[2][0]) +
-    			curvature_tensor[0][2] * (curvature_tensor[1][0] * curvature_tensor[2][1] - curvature_tensor[1][1] * curvature_tensor[2][0]);
+	float trace = 3;
+				//curvature_tensor[0][0] + curvature_tensor[1][1] + curvature_tensor[2][2];
+	float det = 1;
+				//curvature_tensor[0][0] * (curvature_tensor[1][1] * curvature_tensor[2][2] - curvature_tensor[1][2] * curvature_tensor[2][1]) -
+    			//curvature_tensor[0][1] * (curvature_tensor[1][0] * curvature_tensor[2][2] - curvature_tensor[1][2] * curvature_tensor[2][0]) +
+    			//curvature_tensor[0][2] * (curvature_tensor[1][0] * curvature_tensor[2][1] - curvature_tensor[1][1] * curvature_tensor[2][0]);
 	float disc = sqrt(max(0.0, trace * trace - 4.0 * det));
-	float k_max = 0.5 * (trace + disc);
-	float k_min = 0.5 * (trace - disc);
+	float k_max = 0.5 * (trace + disc); //length(cross(normal,tangent));
+	float k_min = 0.5 * (trace - disc); //length(cross(normal,binormal));
 
 	//approx directions
 	vec3 d_max = tangent;
 	vec3 d_min = binormal;
 
-	vs_out.kappa_max = k_max; // the max principal curvature (eigenvalue of tensor)
+	vs_out.kappa_max = k_max; // the size of the max "slope" (not really, were doing some serious simplifications here)
 	vs_out.kappa_min = k_min;
-	vs_out.d_max = d_max; //max principal direction (eigenvalue of tensor)
+	vs_out.d_max = d_max; //the dir 
 	vs_out.d_min = d_min;
 	
 

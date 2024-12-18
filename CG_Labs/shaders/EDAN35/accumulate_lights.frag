@@ -39,7 +39,7 @@ uniform int hatch_sharpness;
 uniform bool has_hatching;
 uniform bool has_toon;
 uniform bool has_edges;
-uniform bool has_curve_hatching;
+uniform bool has_surf_hatching;
 
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
@@ -139,9 +139,10 @@ vec3 rotate_dir(vec3 dir, float ang) {
 	);
 }
 
-float handle_curvature(vec2 coords, vec3 world_pos, int method, float color, int step) {
+float surface_hatch(vec2 coords, vec3 world_pos, int method, float color, int step) {
 	vec3 dir = vec3(0.0);
-	vec4 curv = texture(direction_texture, coords) * 2.0 - 1.0; 
+	vec4 surf = texture(direction_texture, coords) * 2.0 - 1.0; 
+	
 
 	switch (method) {
 		case 0:
@@ -149,21 +150,20 @@ float handle_curvature(vec2 coords, vec3 world_pos, int method, float color, int
 			dir = smooth_dir(coords); 
 			break;
 		case 1:
-			// flowerpots look very good here, but curtains are an extreme mess
-			dir = curv.xyz;
+			// flowerpots look good here, but curtains are an extreme mess
+			dir = surf.xyz;
 			break;
 		default:
 			//defaulting to the one that looks less bad
 			dir = smooth_dir(coords); 
 			break;
 	}
-	float k_max = curv.w; // max curv 
+	float k_max = surf.w; // max surf 
 
 	//flat surfaces leads to wide spacing of hatching lines
-	float curvature = 1.0 + abs(k_max);
-	float dyn_spacing = hatch_spacing / curvature;
+	float surface_bend = 1.0 + abs(k_max);
+	float dyn_spacing = hatch_spacing / surface_bend;
 	//dir = length(dir) > 0.1 ? dir : vec3(0.0, 1.0, 0.0); 
-
 
 	float proj1 = dot(world_pos, dir);
 	float proj2 = dot(world_pos, rotate_dir(dir, 45.0));
@@ -237,7 +237,7 @@ void main()
 
 	for(int i = -range; i <= range; ++i) {
 		for(int j = -range; j <= range; ++j) {
-			vec2 offset = vec2(i,j) * shadowmap_texel_size.xy;
+			vec2 offset = vec2(i,j) * shadowmap_texel_size;
 			sample_coords = shadow_coords + offset;
 			sample_depth = texture(shadow_texture, sample_coords).x;
 
@@ -273,15 +273,11 @@ void main()
 	float hatch_color = 1.0;
 	float e = 1.0;
 
-	int curve_hatch_method = 0; // 0 or 1. 0 looks less bad in general
+	int surf_hatch_method = 0; // 0 or 1. 0 looks less bad in general
 	if (has_hatching) {
 		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
 
-		//non-curve hatching
-		hatch_color = has_curve_hatching ? handle_curvature(texcoords, world_position, curve_hatch_method, toon_color, toon_step) : hatch(toon_color, toon_step);
-
-		//curve hatching
-		//hatch_color = handle_curvature(texcoords, world_position, curve_hatch_method, toon_color, toon_step);
+		hatch_color = has_surf_hatching ? surface_hatch(texcoords, world_position, surf_hatch_method, toon_color, toon_step) : hatch(toon_color, toon_step);
 
 		toon_color = 1.0;
 	}
@@ -292,8 +288,7 @@ void main()
 		e = edge(texcoords, normal_texture, 1);
 		e *= edge(texcoords, depth_texture, 1000);
 	}
-	
-	
+
 	vec3 final_res = vec3(1.0) * toon_color * hatch_color * e;
 	light_diffuse_contribution  = vec4(final_res, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
 	light_specular_contribution = vec4(0.0); //vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;

@@ -40,20 +40,19 @@ void main()
 	geometry_diffuse = vec4(0.0f);
 	if (has_diffuse_texture)
 		geometry_diffuse = vec4(0.3, 0.3, 0.3, 1.0) + 0.7*texture(diffuse_texture, vec2(0.5,0.25));
-		//geometry_diffuse = vec4(1.0f);
 
 	// Specular color
 	geometry_specular = vec4(0.0f);
 	if (has_specular_texture)
-		//geometry_specular = texture(specular_texture, fs_in.texcoord);
 		geometry_specular = vec4(0.0, 0.0, 0.0, 1.0);
 
 
 	//texture normals range [0,1]
 	geometry_normal = vec4(fs_in.normal*0.5+0.5, 1.0);
 
-	// curvature 
-	vec3 curvature_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
-	curvature_direction = normalize(curvature_direction * 0.5 + 0.5);
-	geometry_direction = vec4(curvature_direction, fs_in.kappa_max);
+	// actaully tangent space 
+	//vec3 surface_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
+	//surface_direction = normalize(surface_direction * 0.5 + 0.5);
+	//geometry_direction = vec4(surface_direction, fs_in.kappa_max);
+	geometry_direction = vec4(fs_in.tangent* 0.5 + 0.5, 1.0);
 }
