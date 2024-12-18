@@ -39,6 +39,7 @@ namespace constant
 	constexpr bool   has_hatching		 = true;
 	constexpr bool   has_toon			 = true;
 	constexpr bool	 has_edges			 = true;
+	constexpr bool	 has_curve_hatching  = false;
 }
 
 namespace
@@ -169,6 +170,7 @@ namespace
 		GLuint has_hatching{ 0u };
 		GLuint has_toon{ 0u };
 		GLuint has_edges{ 0u };
+		GLuint has_curve_hatching{ 0u };
 	};
 	void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations);
 
@@ -354,6 +356,7 @@ edan35::Assignment2::run()
 	bool has_hatching = constant::has_hatching;
 	bool has_toon = constant::has_toon;
 	bool has_edges = constant::has_edges;
+	bool has_curve_hatching = constant::has_curve_hatching;
 
 	for (size_t i = 0; i < static_cast<size_t>(lights_nb); ++i) {
 		lightTransforms[i].SetTranslate(glm::vec3(0.0f, 1.25f, 0.0f) * constant::scale_lengths);
@@ -638,6 +641,7 @@ edan35::Assignment2::run()
 				glUniform1i(accumulate_light_shader_locations.has_hatching, has_hatching);
 				glUniform1i(accumulate_light_shader_locations.has_toon, has_toon);
 				glUniform1i(accumulate_light_shader_locations.has_edges, has_edges);
+				glUniform1i(accumulate_light_shader_locations.has_curve_hatching, has_curve_hatching);
 
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)]);
@@ -842,6 +846,7 @@ edan35::Assignment2::run()
 			ImGui::SliderInt("Hatch sharpness", &hatch_sharpness, 1, 100);
 			ImGui::Checkbox("Toon shading", &has_toon);
 			ImGui::Checkbox("Outlines", &has_edges);
+			ImGui::Checkbox("Hatch along curves (experimental)", &has_curve_hatching);
 		}
 		ImGui::End();
 
@@ -1155,6 +1160,7 @@ void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, Accumu
 	locations.has_hatching = glGetUniformLocation(accumulate_lights_shader, "has_hatching");
 	locations.has_toon = glGetUniformLocation(accumulate_lights_shader, "has_toon");
 	locations.has_edges = glGetUniformLocation(accumulate_lights_shader, "has_edges");
+	locations.has_curve_hatching = glGetUniformLocation(accumulate_lights_shader, "has_curve_hatching");
 
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));

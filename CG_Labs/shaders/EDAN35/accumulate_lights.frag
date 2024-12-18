@@ -39,6 +39,7 @@ uniform int hatch_sharpness;
 uniform bool has_hatching;
 uniform bool has_toon;
 uniform bool has_edges;
+uniform bool has_curve_hatching;
 
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
@@ -176,9 +177,9 @@ float handle_curvature(vec2 coords, vec3 world_pos, int method, float color, int
 		    
 		    break;
 		case 1:
-			hatch2 = abs(1.0 - pow(sin(proj2 * dyn_spacing), hatch_sharpness));
+			hatch2 = 1.0 - pow(abs(sin(proj2 * dyn_spacing)), hatch_sharpness);
 		case 2:
-		    hatch1 = abs(1.0 - pow(sin(proj1 * dyn_spacing), hatch_sharpness));
+		    hatch1 = 1.0 - pow(abs(sin(proj1 * dyn_spacing)), hatch_sharpness);
 			break;
 		case 3:
 		    break;
@@ -277,7 +278,7 @@ void main()
 		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
 
 		//non-curve hatching
-		hatch_color = hatch(toon_color, toon_step);
+		hatch_color = has_curve_hatching ? handle_curvature(texcoords, world_position, curve_hatch_method, toon_color, toon_step) : hatch(toon_color, toon_step);
 
 		//curve hatching
 		//hatch_color = handle_curvature(texcoords, world_position, curve_hatch_method, toon_color, toon_step);
