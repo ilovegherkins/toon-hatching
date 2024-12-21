@@ -54,5 +54,6 @@ void main()
 	//vec3 surface_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
 	//surface_direction = normalize(surface_direction * 0.5 + 0.5);
 	//geometry_direction = vec4(surface_direction, fs_in.kappa_max);
-	geometry_direction = vec4(fs_in.tangent* 0.5 + 0.5, 1.0);
+	//k_max is not 1, but basically a constant at this point... so useless :)
+	geometry_direction = vec4(normalize(fs_in.tangent) * 0.5 + 0.5, 1.0);
 }

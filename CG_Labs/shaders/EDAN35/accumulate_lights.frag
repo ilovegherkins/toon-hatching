@@ -160,34 +160,30 @@ float surface_hatch(vec2 coords, vec3 world_pos, int method, float color, int st
 	}
 	float k_max = surf.w; // max surf 
 
-	//flat surfaces leads to wide spacing of hatching lines
-	float surface_bend = 1.0 + abs(k_max);
-	float dyn_spacing = hatch_spacing / surface_bend;
+	//flat surfaces leads to wide spacing of hatching lines (does nothing rn, k_max = 1.0)
+	float surface_bend = abs(k_max);
+	float dyn_spacing = hatch_spacing * surface_bend;
 	//dir = length(dir) > 0.1 ? dir : vec3(0.0, 1.0, 0.0); 
 
 	float proj1 = dot(world_pos, dir);
 	float proj2 = dot(world_pos, rotate_dir(dir, 45.0));
 
-	float hatch1 = 1.0;
-	float hatch2 = 1.0;
+	float hatch_color = 1.0;
 	
-	int shadow_level = int(ceil(color * step));
-	switch(shadow_level) {
-		case 0:
-		    
-		    break;
-		case 1:
-			hatch2 = 1.0 - pow(abs(sin(proj2 * dyn_spacing)), hatch_sharpness);
-		case 2:
-		    hatch1 = 1.0 - pow(abs(sin(proj1 * dyn_spacing)), hatch_sharpness);
-			break;
-		case 3:
-		    break;
-	}
+	int shadow_level = int(ceil((1-color) * step));
 
-	float hatch_color = mix(hatch1, hatch2, 0.5);
+    for (int i = 0; i < step; i++) {
+        if (shadow_level > i) {
+            //float proj = (i % 2 == 0) ? proj1 : proj2; // alternated dir depending on shadow depth, doesnt look good with current impl.
+			float proj = proj1; 
+            float hatch_layer = 1.0 - pow(abs(sin(proj * dyn_spacing)), hatch_sharpness);
+            hatch_color *= mix(1.0, hatch_layer, float(i + 1) / float(step)); 
+        } else {
+            break;
+        }
+    }
+
 	return hatch_color;
-
 }
 
 

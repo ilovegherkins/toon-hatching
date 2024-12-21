@@ -38,8 +38,9 @@ void main() {
 	
 	vs_out.normal   = normalize(normal);
 	vs_out.texcoord = texcoord.xy;
-	vs_out.tangent  = normalize(tangent);
 	vs_out.binormal = normalize(binormal);
+	vs_out.tangent = normalize(tangent);
+	//vs_out.tangent  = normalize(cross(normalize(binormal), normalize(normal)));
 
 	vec3 normal = normalize(mat3(vertex_model_to_world) *normal);	
 	vec3 tangent = normalize(mat3(vertex_model_to_world) *tangent);
