@@ -22,7 +22,9 @@ uniform sampler2D depth_texture;
 uniform sampler2D normal_texture;
 uniform sampler2D shadow_texture;
 uniform sampler2D diffuse_texture;
-uniform sampler2D direction_texture;
+uniform sampler2D tangent_texture;
+uniform sampler2D binormal_texture;
+uniform sampler2D curvature_texture; // not working yet
 
 uniform vec2 inverse_screen_resolution;
 
@@ -40,6 +42,7 @@ uniform bool has_hatching;
 uniform bool has_toon;
 uniform bool has_edges;
 uniform bool has_surf_hatching;
+uniform bool has_curve_hatching;
 
 layout (location = 0) out vec4 light_diffuse_contribution;
 layout (location = 1) out vec4 light_specular_contribution;
@@ -59,30 +62,6 @@ float hatch(float color, int step) {
 		    break;
 	}
 	return res;
-}
-
-vec3 hatch2(vec2 coords, vec3 world_pos, int toon_step, float toon_color) {
-	vec3 surface_dir_sample = texture(direction_texture, coords).xyz * 2.0 - 1.0;
-	surface_dir_sample = normalize(surface_dir_sample);
-
-	float scale_factor = 0.9;
-	float proj = dot(world_pos * scale_factor, surface_dir_sample);
-	
-	float hatch_pattern = abs(sin(proj * scale_factor * hatch_spacing * 3.14159)); 
-
-	int hatch_level = int(ceil((1- toon_color) * toon_step));
-    float hatch_mask = 0.0;
-
-    if (hatch_level == 1) {
-        hatch_mask = 1.0 - pow(hatch_pattern, 2); 
-    } else if (hatch_level == 2) {
-        hatch_mask = pow(hatch_pattern, 2); 
-    }
-	
-	hatch_pattern = pow(hatch_pattern, float(hatch_sharpness));
-	
-	vec3 hatch_color = vec3(hatch_pattern);
-	return hatch_color * hatch_mask;
 }
 
 float toon(vec3 n, vec3 L, float factor, int toon_step) {
@@ -116,76 +95,97 @@ float edge(vec2 t, sampler2D tex, int weight) {
 	
 }
 
-vec3 smooth_dir(vec2 coords) {
-	vec2 tex_size = 1.0/ textureSize(direction_texture,0);
-	vec3 smooth_dir = vec3(0.0);
+vec3 smooth_tangent(vec2 coords) {
+	vec2 tex_size = 1.0/ textureSize(tangent_texture,0);
+	vec3 smooth_tangent = vec3(0.0);
 	for (int i = -1; i <= 1; ++i) {
 		for (int j = -1; j <= 1; ++j) {
-			smooth_dir += texture(direction_texture, coords + vec2(i,j) *tex_size).xyz;
+			smooth_tangent += texture(tangent_texture, coords + vec2(i,j) *tex_size).xyz;
 		}
 	}
-	smooth_dir = normalize(smooth_dir);
-	return smooth_dir;
+	smooth_tangent = normalize(smooth_tangent);
+	return smooth_tangent;
 }
 
-vec3 rotate_dir(vec3 dir, float ang) {
-	float angle = radians(ang);
-	float c = cos(angle);
-	float s = sin(angle);
-	return vec3(
-		c * dir.x - s * dir.y,
-		s * dir.x + c * dir.y,
-		dir.z
-	);
-}
+float tangent_hatch(vec2 coords, vec3 world_pos, float color, int toon_step) {
+	vec3 dir = smooth_tangent(coords);
+	float proj = dot(world_pos, dir);
 
-float surface_hatch(vec2 coords, vec3 world_pos, int method, float color, int step) {
-	vec3 dir = vec3(0.0);
-	vec4 surf = texture(direction_texture, coords) * 2.0 - 1.0; 
-	
-
-	switch (method) {
-		case 0:
-			// flowerpots look ok here and curtains look below decent
-			dir = smooth_dir(coords); 
-			break;
-		case 1:
-			// flowerpots look good here, but curtains are an extreme mess
-			dir = surf.xyz;
-			break;
-		default:
-			//defaulting to the one that looks less bad
-			dir = smooth_dir(coords); 
-			break;
-	}
-	float k_max = surf.w; // max surf 
-
-	//flat surfaces leads to wide spacing of hatching lines (does nothing rn, k_max = 1.0)
-	float surface_bend = abs(k_max);
-	float dyn_spacing = hatch_spacing * surface_bend;
-	//dir = length(dir) > 0.1 ? dir : vec3(0.0, 1.0, 0.0); 
-
-	float proj1 = dot(world_pos, dir);
-	float proj2 = dot(world_pos, rotate_dir(dir, 45.0));
-
+	//didnt need to rewrite this, we only use 3 steps anyway
 	float hatch_color = 1.0;
-	
-	int shadow_level = int(ceil((1-color) * step));
-
-    for (int i = 0; i < step; i++) {
+	int shadow_level = int(ceil((1-color) * toon_step));
+    for (int i = 0; i < toon_step; i++) {
         if (shadow_level > i) {
-            //float proj = (i % 2 == 0) ? proj1 : proj2; // alternated dir depending on shadow depth, doesnt look good with current impl.
-			float proj = proj1; 
-            float hatch_layer = 1.0 - pow(abs(sin(proj * dyn_spacing)), hatch_sharpness);
-            hatch_color *= mix(1.0, hatch_layer, float(i + 1) / float(step)); 
+            float hatch_layer = step(fract(proj * hatch_spacing), 0.5);
+            hatch_color *= mix(1.0, hatch_layer, float(i + 1) / float(toon_step)); 
         } else {
             break;
         }
     }
-
 	return hatch_color;
 }
 
+//power iteration 
+vec2 power(mat2 M, int it) {
+    vec2 b_n = vec2(0.5, 0.4); // should be random
+    for (int i = 0; i < it; ++i) {
+        vec2 b_n1 = M * b_n;
+        float b_n1_norm = length(b_n1);
+
+        b_n = b_n1 / b_n1_norm;
+    }
+	return b_n;
+}
+
+vec3 get_curv_n_dir(vec2 coords){
+	//partial derivatives of N with regards to t and b
+    vec3 curr_n = texture(normal_texture, coords).xyz * 2.0 - 1.0; //should we sample or use the incoming? :think
+    vec3 b = texture(binormal_texture, coords).xyz * 2.0 - 1.0;
+    vec3 t = texture(tangent_texture, coords).xyz * 2.0 - 1.0;
+
+    //sample normal along t & b plane
+    float epsilon = 0.001;
+    vec3 n_b = texture(normal_texture, coords + b.xy * epsilon).xyz * 2.0 - 1.0;
+    vec3 n_t = texture(normal_texture, coords + t.xy * epsilon).xyz * 2.0 - 1.0;
+
+    //approx derivatives
+    vec3 d_ny = (n_b - curr_n)/epsilon;
+    vec3 d_nx = (n_t - curr_n)/epsilon; 
+
+    //shape operator
+    mat2 S = mat2(dot(d_nx , t), dot(d_ny, t),
+                dot(d_nx, b), dot(d_ny, b));
+
+
+    //eigenvector approx
+    vec2 p_dir = power(S, 5);
+
+    //curvature is given by biggest eigenvalue
+    float max_curv = max(p_dir.x, p_dir.y);
+	
+    return vec3(max_curv, p_dir);
+}
+
+
+float surface_hatch(vec2 coords, int steps) {
+	vec3 curv_dir = get_curv_n_dir(coords);
+    float max_curv = curv_dir.x;
+    vec2 p_dir = normalize(curv_dir.yz);
+
+	//restrict hatching 
+	float min_d = 0.0;
+	float max_d = 0.5;
+	float d_scale = 0.3;
+	//more stable than clamp
+    float d = mix(min_d, max_d, smoothstep(0.0, 1.0, abs(max_curv) * d_scale));
+
+    vec2 hatch_coords = coords.xy * p_dir;
+    float hatch_lines = step(fract(hatch_coords.x * d), 0.5);
+
+    float hatch = smoothstep(0.45, 0.55, hatch_lines); 
+
+	return 1.0 - hatch;
+}
 
 void main()
 {
@@ -268,12 +268,12 @@ void main()
 	float toon_color = 1.0;
 	float hatch_color = 1.0;
 	float e = 1.0;
+	float curve_hatch = 1.0;
 
-	int surf_hatch_method = 0; // 0 or 1. 0 looks less bad in general
 	if (has_hatching) {
 		toon_color = toon(normal, L, falloff * shadow_ratio, toon_step);
 
-		hatch_color = has_surf_hatching ? surface_hatch(texcoords, world_position, surf_hatch_method, toon_color, toon_step) : hatch(toon_color, toon_step);
+		hatch_color = has_surf_hatching ? tangent_hatch(texcoords, world_position, toon_color, toon_step) : hatch(toon_color, toon_step);
 
 		toon_color = 1.0;
 	}
@@ -284,8 +284,14 @@ void main()
 		e = edge(texcoords, normal_texture, 1);
 		e *= edge(texcoords, depth_texture, 1000);
 	}
+	if (has_curve_hatching) {
+		curve_hatch = surface_hatch(texcoords, toon_step);
+	}
 
-	vec3 final_res = vec3(1.0) * toon_color * hatch_color * e;
-	light_diffuse_contribution  = vec4(final_res, 1.0); //vec4(diffuse) * vec4(light_color, 1.0) * falloff * shadow_ratio;
-	light_specular_contribution = vec4(0.0); //vec4(spec) * vec4(light_color, 1.0) * falloff * shadow_ratio;
+
+
+	vec3 final_res = vec3(1.0) * toon_color * hatch_color * e * curve_hatch;
+
+	light_diffuse_contribution  = vec4(vec3(final_res), 1.0); 
+	light_specular_contribution = vec4(0.0); 
 }

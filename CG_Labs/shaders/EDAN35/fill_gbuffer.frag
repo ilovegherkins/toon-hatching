@@ -19,17 +19,13 @@ in VS_OUT {
 	vec2 texcoord;
 	vec3 tangent;
 	vec3 binormal;
-
-	float kappa_max;
-	float kappa_min;
-	vec3 d_max;
-	vec3 d_min;
 } fs_in;
 
 layout (location = 0) out vec4 geometry_diffuse;
 layout (location = 1) out vec4 geometry_specular;
 layout (location = 2) out vec4 geometry_normal;
-layout (location = 3) out vec4 geometry_direction;
+layout (location = 3) out vec4 geometry_tangent;
+layout (location = 4) out vec4 geometry_binormal; 
 
 void main()
 {	
@@ -48,12 +44,7 @@ void main()
 
 
 	//texture normals range [0,1]
-	geometry_normal = vec4(fs_in.normal*0.5+0.5, 1.0);
-
-	// actaully tangent space 
-	//vec3 surface_direction = abs(fs_in.kappa_max) >= abs(fs_in.kappa_min) ? fs_in.d_max : fs_in.d_min;
-	//surface_direction = normalize(surface_direction * 0.5 + 0.5);
-	//geometry_direction = vec4(surface_direction, fs_in.kappa_max);
-	//k_max is not 1, but basically a constant at this point... so useless :)
-	geometry_direction = vec4(normalize(fs_in.tangent) * 0.5 + 0.5, 1.0);
+	geometry_normal = vec4(fs_in.normal * 0.5 + 0.5, 1.0);
+	geometry_binormal = vec4(fs_in.binormal* 0.5 + 0.5, 1.0);
+	geometry_tangent = vec4(fs_in.tangent * 0.5 + 0.5, 1.0);
 }

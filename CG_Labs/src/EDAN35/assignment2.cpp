@@ -39,7 +39,8 @@ namespace constant
 	constexpr bool   has_hatching		 = true;
 	constexpr bool   has_toon			 = true;
 	constexpr bool	 has_edges			 = true;
-	constexpr bool	 has_surf_hatching  = false;
+	constexpr bool	 has_surf_hatching   = false;
+	constexpr bool	 has_curve_hatching	 = false;
 }
 
 namespace
@@ -54,8 +55,10 @@ namespace
 		ShadowMap,
 		GBufferDiffuse,
 		GBufferSpecular,
-		GBufferDirection,
+		GBufferTangent,
 		GBufferWorldSpaceNormal,
+		GBufferBinormal, 
+		Curvature, 
 		LightDiffuseContribution,
 		LightSpecularContribution,
 		Result,
@@ -76,6 +79,7 @@ namespace
 	enum class FBO : uint32_t {
 		GBuffer = 0u,
 		ShadowMap,
+		CurveMap,
 		LightAccumulation,
 		Resolve,
 		FinalWithDepth,
@@ -127,12 +131,13 @@ namespace
 		GLuint diffuse_texture{ 0u };
 		GLuint specular_texture{ 0u };
 		GLuint normals_texture{ 0u };
+		GLuint binormals_texture{ 0u };
 		GLuint opacity_texture{ 0u };
 		GLuint has_diffuse_texture{ 0u };
 		GLuint has_specular_texture{ 0u };
 		GLuint has_normals_texture{ 0u };
 		GLuint has_opacity_texture{ 0u };
-		GLuint direction_texture{ 0u };
+		GLuint tangent_texture{ 0u };
 	};
 	void fillGBufferShaderLocations(GLuint gbuffer_shader, GBufferShaderLocations& locations);
 
@@ -145,6 +150,19 @@ namespace
 		GLuint has_opacity_texture{ 0u };
 	};
 	void fillShadowmapShaderLocations(GLuint shadowmap_shader, FillShadowmapShaderLocations& locations);
+
+	struct CurvatureShaderLocations
+	{
+		GLuint ubo_CameraViewProjTransforms{ 0u }; 
+		GLuint vertex_model_to_world{ 0u };
+		GLuint normal_model_to_world{ 0u };
+		GLuint normals_texture{ 0u };
+		GLuint binormals_texture{ 0u };
+		GLuint tangents_texture{ 0u };
+		GLuint curvature_texture{ 0u };
+	};
+	//Hej
+	void fillCurvatureShaderLocations(GLuint curvature_shader, CurvatureShaderLocations& locations);
 
 	struct AccumulateLightsShaderLocations
 	{
@@ -166,11 +184,14 @@ namespace
 		GLuint light_angle_falloff{ 0u };
 		GLuint hatch_spacing{ 0u };
 		GLuint hatch_sharpness{ 0u };
-		GLuint direction_texture{ 0u };
+		GLuint tangent_texture{ 0u };
 		GLuint has_hatching{ 0u };
 		GLuint has_toon{ 0u };
 		GLuint has_edges{ 0u };
 		GLuint has_surf_hatching{ 0u };
+		GLuint curvature_texture{ 0u };
+		GLuint binormal_texture{ 0u };
+		GLuint has_curve_hatching{ 0u };
 	};
 	void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations);
 
@@ -297,6 +318,18 @@ edan35::Assignment2::run()
 	FillShadowmapShaderLocations fill_shadowmap_shader_locations;
 	fillShadowmapShaderLocations(fill_shadowmap_shader, fill_shadowmap_shader_locations);
 
+	GLuint fill_curvature_shader = 0u;
+	program_manager.CreateAndRegisterProgram("Curvature",
+	                                         { { ShaderType::vertex, "EDAN35/curvature.vert" },
+	                                           { ShaderType::fragment, "EDAN35/curvature.frag" } },
+	                                         fill_curvature_shader);
+	if (fill_curvature_shader == 0u) {
+		LogError("Failed to load curvature shader");
+		return;
+	}
+	CurvatureShaderLocations fill_curvature_shader_locations;
+	fillCurvatureShaderLocations(fill_curvature_shader, fill_curvature_shader_locations);
+
 	GLuint accumulate_lights_shader = 0u;
 	program_manager.CreateAndRegisterProgram("Accumulate light",
 	                                         { { ShaderType::vertex, "EDAN35/accumulate_lights.vert" },
@@ -357,6 +390,7 @@ edan35::Assignment2::run()
 	bool has_toon = constant::has_toon;
 	bool has_edges = constant::has_edges;
 	bool has_surf_hatching = constant::has_surf_hatching;
+	bool has_curve_hatching = constant::has_curve_hatching;
 
 	for (size_t i = 0; i < static_cast<size_t>(lights_nb); ++i) {
 		lightTransforms[i].SetTranslate(glm::vec3(0.0f, 1.25f, 0.0f) * constant::scale_lengths);
@@ -434,6 +468,7 @@ edan35::Assignment2::run()
 			{
 				fillGBufferShaderLocations(fill_gbuffer_shader, fill_gbuffer_shader_locations);
 				fillShadowmapShaderLocations(fill_shadowmap_shader, fill_shadowmap_shader_locations);
+				fillCurvatureShaderLocations(fill_curvature_shader, fill_curvature_shader_locations);
 				fillAccumulateLightsShaderLocations(accumulate_lights_shader, accumulate_light_shader_locations);
 			}
 		}
@@ -493,7 +528,8 @@ edan35::Assignment2::run()
 			glUniform1i(fill_gbuffer_shader_locations.specular_texture, 1);
 			glUniform1i(fill_gbuffer_shader_locations.normals_texture, 2);
 			glUniform1i(fill_gbuffer_shader_locations.opacity_texture, 3);
-			glUniform1i(fill_gbuffer_shader_locations.direction_texture, 4);
+			//glUniform1i(fill_gbuffer_shader_locations.tangent_texture, 4);
+			//glUniform1i(fill_gbuffer_shader_locations.binormals_texture, 5);
 			for (std::size_t i = 0; i < sponza_geometry.size(); ++i)
 			{
 				auto const& geometry = sponza_geometry[i];
@@ -546,6 +582,60 @@ edan35::Assignment2::run()
 			glEndQuery(GL_TIME_ELAPSED);
 			utils::opengl::debug::endDebugGroup();
 
+			utils::opengl::debug::beginDebugGroup("Fill CurveMap");
+
+			//curve here
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[toU(FBO::CurveMap)]);
+			glViewport(0, 0, framebuffer_width, framebuffer_height);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+			glUseProgram(fill_curvature_shader);
+			glUniform1i(fill_curvature_shader_locations.normals_texture, 0);
+			glUniform1i(fill_curvature_shader_locations.binormals_texture, 1);
+			glUniform1i(fill_curvature_shader_locations.tangents_texture, 2);
+
+			for (std::size_t i = 0; i < sponza_geometry.size(); ++i)
+			{
+				auto const& geometry = sponza_geometry[i];
+				auto const& texture_data = sponza_geometry_texture_data[i];
+
+				utils::opengl::debug::beginDebugGroup(geometry.name);
+
+				auto const vertex_model_to_world = glm::mat4(1.0f);
+				auto const normal_model_to_world = glm::mat4(1.0f);
+
+				glUniformMatrix4fv(fill_curvature_shader_locations.vertex_model_to_world, 1, GL_FALSE, glm::value_ptr(vertex_model_to_world));
+				glUniformMatrix4fv(fill_curvature_shader_locations.normal_model_to_world, 1, GL_FALSE, glm::value_ptr(normal_model_to_world));
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferWorldSpaceNormal)]);
+				
+				glBindSampler(0, samplers[toU(Sampler::Linear)]);
+
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferBinormal)]);
+				
+				glBindSampler(1, samplers[toU(Sampler::Linear)]);
+
+				glActiveTexture(GL_TEXTURE2);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferTangent)]);
+				
+				glBindSampler(2, samplers[toU(Sampler::Linear)]);
+
+				glBindVertexArray(geometry.vao);
+				
+				if (geometry.ibo != 0u)
+					glDrawElements(geometry.drawing_mode, geometry.indices_nb, GL_UNSIGNED_INT, reinterpret_cast<GLvoid const*>(0x0));
+				else
+					glDrawArrays(geometry.drawing_mode, 0, geometry.vertices_nb);
+
+
+				utils::opengl::debug::endDebugGroup();
+			}
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindVertexArray(0u);
+			glUseProgram(0u);
+			utils::opengl::debug::endDebugGroup();
 
 
 			//
@@ -642,6 +732,7 @@ edan35::Assignment2::run()
 				glUniform1i(accumulate_light_shader_locations.has_toon, has_toon);
 				glUniform1i(accumulate_light_shader_locations.has_edges, has_edges);
 				glUniform1i(accumulate_light_shader_locations.has_surf_hatching, has_surf_hatching);
+				glUniform1i(accumulate_light_shader_locations.has_curve_hatching, has_curve_hatching);
 
 				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)]);
@@ -659,9 +750,19 @@ edan35::Assignment2::run()
 				glBindSampler(2, samplers[toU(Sampler::Linear)]);
 
 				glActiveTexture(GL_TEXTURE3);
-				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)]);
-				glUniform1i(accumulate_light_shader_locations.direction_texture, 3);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferTangent)]);
+				glUniform1i(accumulate_light_shader_locations.tangent_texture, 3);
 				glBindSampler(3, samplers[toU(Sampler::Linear)]);
+
+				glActiveTexture(GL_TEXTURE4);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::Curvature)]);
+				glUniform1i(accumulate_light_shader_locations.curvature_texture, 4);
+				glBindSampler(4, samplers[toU(Sampler::Linear)]);
+
+				glActiveTexture(GL_TEXTURE5);
+				glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferBinormal)]);
+				glUniform1i(accumulate_light_shader_locations.binormal_texture, 5);
+				glBindSampler(5, samplers[toU(Sampler::Linear)]);
 
 				glBindVertexArray(cone_geometry.vao);
 				glDrawArrays(cone_geometry.drawing_mode, 0, cone_geometry.vertices_nb);
@@ -759,7 +860,7 @@ edan35::Assignment2::run()
 		// 
 		if (show_textures) {
 			bonobo::displayTexture({-0.95f, -0.95f}, {-0.55f, -0.55f}, textures[toU(Texture::GBufferDiffuse)],            samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
-			bonobo::displayTexture({-0.45f, -0.95f}, {-0.05f, -0.55f}, textures[toU(Texture::GBufferDirection)],/*specular*/          samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
+			bonobo::displayTexture({-0.45f, -0.95f}, {-0.05f, -0.55f}, textures[toU(Texture::GBufferTangent)],/*specular*/          samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
 			bonobo::displayTexture({ 0.05f, -0.95f}, { 0.45f, -0.55f}, textures[toU(Texture::GBufferWorldSpaceNormal)],   samplers[toU(Sampler::Linear)], {0, 1, 2, -1}, glm::uvec2(framebuffer_width, framebuffer_height));
 			bonobo::displayTexture({ 0.55f, -0.95f}, { 0.95f, -0.55f}, textures[toU(Texture::DepthBuffer)],               samplers[toU(Sampler::Linear)], {0, 0, 0, -1}, glm::uvec2(framebuffer_width, framebuffer_height), true, mCamera.mNear, mCamera.mFar);
 			bonobo::displayTexture({-0.95f,  0.55f}, {-0.55f,  0.95f}, textures[toU(Texture::ShadowMap)],                 samplers[toU(Sampler::Linear)], {0, 0, 0, -1}, glm::uvec2(framebuffer_width, framebuffer_height), true, lightProjectionNearPlane, lightProjectionFarPlane);
@@ -847,6 +948,7 @@ edan35::Assignment2::run()
 			ImGui::Checkbox("Toon shading", &has_toon);
 			ImGui::Checkbox("Outlines", &has_edges);
 			ImGui::Checkbox("Hatch along surfaces (experimental)", &has_surf_hatching);
+			ImGui::Checkbox("Curve hatch", &has_curve_hatching);
 		}
 		ImGui::End();
 
@@ -892,6 +994,8 @@ edan35::Assignment2::run()
 	fill_gbuffer_shader = 0u;
 	glDeleteProgram(fallback_shader);
 	fallback_shader = 0u;
+	glDeleteProgram(fill_curvature_shader);
+	fill_curvature_shader = 0u;
 }
 
 int main()
@@ -935,9 +1039,17 @@ Textures createTextures(GLsizei framebuffer_width, GLsizei framebuffer_height)
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferWorldSpaceNormal)], "GBuffer normals");
 
-	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)]);
+	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferTangent)]);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferDirection)], "GBuffer direction");
+	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferTangent)], "GBuffer tangents");
+
+	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::GBufferBinormal)]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::GBufferBinormal)], "GBuffer binormals");
+
+	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::Curvature)]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	utils::opengl::debug::nameObject(GL_TEXTURE, textures[toU(Texture::Curvature)], "Curvature");
 
 	glBindTexture(GL_TEXTURE_2D, textures[toU(Texture::LightDiffuseContribution)]);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -996,14 +1108,16 @@ FBOs createFramebufferObjects(Textures const& textures)
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, textures[toU(Texture::GBufferSpecular)], 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, textures[toU(Texture::GBufferWorldSpaceNormal)], 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textures[toU(Texture::DepthBuffer)], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textures[toU(Texture::GBufferDirection)], 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textures[toU(Texture::GBufferTangent)], 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, textures[toU(Texture::GBufferBinormal)], 0);
 	glReadBuffer(GL_NONE); // Disable reading back from the colour attachments, as unnecessary in this assignment.
 	// Configure the mapping from fragment shader outputs to colour attachments.
-	std::array<GLenum, 4> const gbuffer_draws = {
+	std::array<GLenum, 5> const gbuffer_draws = {
 		GL_COLOR_ATTACHMENT0, // The fragment shader output at location 0 will be written to colour attachment 0 (i.e. the diffuse texture).
 		GL_COLOR_ATTACHMENT1, // The fragment shader output at location 1 will be written to colour attachment 1 (i.e. the specular texture).
 		GL_COLOR_ATTACHMENT2,  // The fragment shader output at location 2 will be written to colour attachment 2 (i.e. the normal texture).
-		GL_COLOR_ATTACHMENT3	//dir
+		GL_COLOR_ATTACHMENT3,	//dir
+		GL_COLOR_ATTACHMENT4	//binormal
 	};
 	glDrawBuffers(static_cast<GLsizei>(gbuffer_draws.size()), gbuffer_draws.data());
 	validate_fbo("GBuffer");
@@ -1013,6 +1127,17 @@ FBOs createFramebufferObjects(Textures const& textures)
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textures[toU(Texture::ShadowMap)], 0);
 	validate_fbo("Shadow map generation");
 	utils::opengl::debug::nameObject(GL_FRAMEBUFFER, fbos[toU(FBO::ShadowMap)], "Shadow map generation");
+
+	//curv
+	glBindFramebuffer(GL_FRAMEBUFFER, fbos[toU(FBO::CurveMap)]);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[toU(Texture::Curvature)], 0);
+	glReadBuffer(GL_NONE);
+	std::array<GLenum, 1> const curve_draws = {
+		GL_COLOR_ATTACHMENT0 //curvature
+	};
+	glDrawBuffers(static_cast<GLsizei>(curve_draws.size()), curve_draws.data());
+	validate_fbo("Curve map generation");
+	utils::opengl::debug::nameObject(GL_FRAMEBUFFER, fbos[toU(FBO::CurveMap)], "Curve map generation");
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbos[toU(FBO::LightAccumulation)]);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[toU(Texture::LightDiffuseContribution)], 0);
@@ -1119,7 +1244,8 @@ void fillGBufferShaderLocations(GLuint gbuffer_shader, GBufferShaderLocations& l
 	locations.has_specular_texture = glGetUniformLocation(gbuffer_shader, "has_specular_texture");
 	locations.has_normals_texture = glGetUniformLocation(gbuffer_shader, "has_normals_texture");
 	locations.has_opacity_texture = glGetUniformLocation(gbuffer_shader, "has_opacity_texture");
-	locations.direction_texture = glGetUniformLocation(gbuffer_shader, "direction_texture");
+	locations.tangent_texture = glGetUniformLocation(gbuffer_shader, "tangent_texture");
+	locations.binormals_texture = glGetUniformLocation(gbuffer_shader, "binormals_texture");
 
 	glUniformBlockBinding(gbuffer_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 
@@ -1134,6 +1260,20 @@ void fillShadowmapShaderLocations(GLuint shadowmap_shader, FillShadowmapShaderLo
 	locations.has_opacity_texture = glGetUniformLocation(shadowmap_shader, "has_opacity_texture");
 
 	glUniformBlockBinding(shadowmap_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));
+}
+
+void fillCurvatureShaderLocations(GLuint curvature_shader, CurvatureShaderLocations& locations)
+{
+	locations.ubo_CameraViewProjTransforms = glGetUniformBlockIndex(curvature_shader, "CameraViewProjTransforms");
+	locations.vertex_model_to_world = glGetUniformLocation(curvature_shader, "vertex_model_to_world");
+	locations.normal_model_to_world = glGetUniformLocation(curvature_shader, "normal_model_to_world");
+	locations.normals_texture = glGetUniformLocation(curvature_shader, "normals_texture");
+	locations.binormals_texture = glGetUniformLocation(curvature_shader, "binormals_texture");
+	locations.tangents_texture = glGetUniformLocation(curvature_shader, "tangents_texture");
+	locations.curvature_texture = glGetUniformLocation(curvature_shader, "curvature_texture");	
+
+	
+	glUniformBlockBinding(curvature_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 }
 
 void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, AccumulateLightsShaderLocations& locations)
@@ -1156,11 +1296,14 @@ void fillAccumulateLightsShaderLocations(GLuint accumulate_lights_shader, Accumu
 	locations.light_angle_falloff = glGetUniformLocation(accumulate_lights_shader, "light_angle_falloff");
 	locations.hatch_spacing = glGetUniformLocation(accumulate_lights_shader, "hatch_spacing");
 	locations.hatch_sharpness = glGetUniformLocation(accumulate_lights_shader, "hatch_sharpness");
-	locations.direction_texture = glGetUniformLocation(accumulate_lights_shader, "direction_texture");
+	locations.tangent_texture = glGetUniformLocation(accumulate_lights_shader, "tangent_texture");
 	locations.has_hatching = glGetUniformLocation(accumulate_lights_shader, "has_hatching");
 	locations.has_toon = glGetUniformLocation(accumulate_lights_shader, "has_toon");
 	locations.has_edges = glGetUniformLocation(accumulate_lights_shader, "has_edges");
 	locations.has_surf_hatching = glGetUniformLocation(accumulate_lights_shader, "has_surf_hatching");
+	locations.curvature_texture = glGetUniformLocation(accumulate_lights_shader, "curvature_texture");
+	locations.binormal_texture = glGetUniformLocation(accumulate_lights_shader, "binormal_texture");
+	locations.has_curve_hatching = glGetUniformLocation(accumulate_lights_shader, "has_curve_hatching");
 
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_CameraViewProjTransforms, toU(UBO::CameraViewProjTransforms));
 	glUniformBlockBinding(accumulate_lights_shader, locations.ubo_LightViewProjTransforms, toU(UBO::LightViewProjTransforms));
